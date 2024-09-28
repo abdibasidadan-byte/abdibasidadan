@@ -1,0 +1,933 @@
+# Computation of 14 Drought Indices (SPI, SPEI, PDSI, RAI, RD, ZSI, EDI, RDDI, PPN, HDSI, CZI, MCZI, PNI, and RDI) 
+# and Their Characteristics, Applicable to Daily and Monthly Data from One or More Stations, Using the R Programming Language
+1 - HOMOGENEITY, NORMALITY AND CORRELATION TEST: 
+
+# RHTest, that uses a two-phase regression technique (Wang 2003) 
+# for the detection and adjustment of inhomogeneity is available from this site.
+# Explication : http://etccdi.pacificclimate.org/homogenization.shtml
+#
+data=read.table(file("clipboard"),header=TRUE, sep="\t", dec=".", row.names=1)
+# dataa=read.table(file("clipboard"),header=TRUE, sep="\t", dec=".")
+str(data)
+dim(data)
+attach(data)
+summary(data)
+#
+# install.packages("climtrends", repos="http://R-Forge.R-project.org")
+require(trend)
+require(graphics)
+library(package = dplyr, warn.conflicts = FALSE )
+library(package = ggplot2, warn.conflicts = FALSE)
+library(package = trend, warn.conflicts = FALSE)
+require(ggplot2)
+require(strucchange)
+library(climtrends)
+require(DescTools)
+#
+sd(na.omit(data[,35])) / mean(na.omit(data[,35]) )* 100
+cbind(sapply(data, function(x) sd(x) / mean(x) * 100))
+#
+# https://www.statology.org/coefficient-of-variation-in-r/
+#
+dim(data)
+View(cbind(names(data)))
+homotest <- ts(na.omit(data[,25 ]) , start=1961/01/01, frequency=12)
+#
+pettitt.test(homotest )      # Pettitt's test for single change-point detection # print(trend::pettitt.test(x = homotest))
+BartelsRankTest(homotest, alternative="trend", method="beta")
+
+VonNeumannTest(homotest , alternative = c("two.sided", "less", "greater"), unbiased = TRUE)
+(res <- snh.test(homotest))  # Standard normal homogeneity test
+(res <- br.test(homotest ))  # Buishand range test
+wm.test(homotest) # Wallis and Moore Phase-Frequency test
+bartels.test(homotest)             # Bartels's test for randomness
+ww.test(homotest)                  # Wald-Wolfowitz test for independence and stationarity
+wm.test(homotest)                  # Wallis and Moore Phase-Frequency test
+(res <- bu.test(homotest))         # Buishand U test
+#
+ocus.nile <- efp(homotest ~ 1, type =  "OLS-CUSUM")
+omus.nile <- efp(homotest ~ 1, type =  "OLS-MOSUM")
+rocus.nile <- efp(homotest ~ 1, type = "Rec-CUSUM")
+bp.nile <- breakpoints(homotest ~ 1)
+#
+opar <- par(mfrow=c(2,2))
+plot(prectot, ylab="Precipitation (mm)", type="o",xlab="Year", main ="Annual Precipitation")
+abline(h= mean(prectot),col='blue')
+plot(ocus.nile, type="o",xlab="Year")
+plot(omus.nile, type="o",xlab="Year")
+plot(rocus.nile, type="o",xlab="Year")
+#
+cor.test( x,y,alternative = c("two.sided", "less", "greater"),
+          use="complete.obs", method="kendall",conf.level = 0.95)
+#
+fs.days = Fstats(year~Dec+Feb+Mar+Apr+May+Jun+Jul+Aug+Sep+Oct+Nov,data=rm)
+plot(fs.days)
+#use the breakpoints functions to find BIC corresponding to optimal number of #breaks
+bp.days = breakpoints(year~Dec+Feb+Mar+Apr+May,data=rm)
+summary(bp.days)
+x11()
+plot(bp.days)
+#
+prectot=ts(prectot, start=1961, end=2017)
+nile.fac <- breakfactor(bp.nile, breaks = 1 )
+fm1.nile <- lm(prectot~ nile.fac - 1)
+plot(bp.nile)
+#
+prectot=ts(prectot, start=1961, end=2017)
+opar <- par(mfrow=c(2,1), mar=c(2,2,0,2))
+plot(ocus.nile, alt.boundary=F,main="")
+abline(v= 1980, lty=2, col='red')
+plot(prectot, ylab="")
+abline(h= mean(prectot),col='blue')
+abline(v= 1980, lty=2, col='red')
+lines(ts(predict(fm1.nile),start=1980,freq=1), col='darkgreen',lwd=2)
+par(opar)
+plot(prectot)
+#
+## F statistics indicate one breakpoint
+fs.nile <- Fstats(prectot ~ 1)
+plot(fs.nile)
+breakpoints(fs.nile)
+lines(breakpoints(fs.nile))
+#or
+bp.nile <- breakpoints(prectot ~ 1)
+summary(bp.nile)
+#
+# the BIC also chooses one breakpoint
+plot(bp.nile)
+breakpoints(bp.nile)
+#
+## confidence interval
+ci.nile <- confint(bp.nile)
+ci.nile
+lines(ci.nile)
+#
+## fit null hypothesis model and model with 1 breakpoint
+fm0 <- lm(prectot ~ 1)
+fm1 <- lm(prectot ~ breakfactor(bp.nile, breaks = 1))
+plot(prectot, xlab="Year", ylab="Preciptation (mm)")
+lines(ts(fitted(fm0), start = 2006), col = 3)
+lines(ts(fitted(fm1), start = 2006), col = 4)
+lines(bp.nile)
+abline(v=2006, lty=2, col=2)
+# confidence intervals
+ci.seat2 <- confint(bp.nile, breaks = 2)
+ci.seat2
+lines(ci.seat2)
+#
+library(tidyverse)
+library(ggpubr)
+library(car)
+library(LaplacesDemon)
+library(vGWAS)
+library(onewaytests)
+library(caret)
+# install.packages('vGWAS', repos = 'http://r-forge.r-project.org')
+cbind(names(Census.Data))
+dim(Census.Data)
+Z=Census.Data[,4]
+#
+shapiro.test(Z)
+nortest::sf.test(Z)
+brown.forsythe.test(y = Census.Dat$F, group = Census.Dat$sample)
+leveneTest(Census.Dat$F ~ Census.Dat$sample, Census.Dat)
+#
+Census.Dat %>%
+  group_by(sample) %>%
+  summarize(Variance=var(Census.Dat$F)) 
+bf.test(Census.Dat$F ~ Census.Dat$sample, data = Census.Dat)
+#
+# TRANSFORMATION BOXCOX()
+data = Census.Dat[,4]
+bc_trans <- BoxCoxTrans(data)
+transformed_data <- predict(bc_trans, data)
+x11();hist(transformed_data)
+x11();qqnorm(transformed_data); qqline(transformed_data)
+# Deviations from the straight line are minimal = indicates normal distribution.
+# boxcox Equivalent de log en graph de qqnorm
+#https://stats.stackexchange.com/questions/52293/r-qqplot-how-to-see-whether-data-are-normally-distributed
+#https://www.geeksforgeeks.org/how-to-use-boxcox-transformation-in-the-caret-package-in-r/
+# https://www.statology.org/box-cox-transformation-excel/
+#
+library(zFactor)
+library(tibble)
+library(ggplot2)
+# install.packages("devtools")
+# devtools::install_github("f0nzie/zFactor")
+# install.packages("zFactor")
+x11();zFactor:::z.plot.range("BB",  interval = "fine")
+# get `z` values from the Standing-Katz chart
+tpr <- c(1.2, 1.3, 1.5, 2.0, 3.0) 
+ppr <- c(0.5, 1.5, 2.5, 3.5, 4.5, 5.5) 
+getStandingKatzMatrix(ppr_vector = ppr, tpr_vector = tpr, 
+                      pprRange = "lp")
+# calculate `z` using the Beggs-Brill correlation
+z.BeggsBrill(pres.pr = 1.5, temp.pr = 2.0)
+# calculate `z` using the Hall-Yarborough correlation
+z.HallYarborough(pres.pr = 1.5, temp.pr = 2.0)
+# calculate `z` using the correlation Dranchuk-AbousKassem
+ppr <- c(0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5) 
+tpr <- c(1.05, 1.1, 1.7, 2) 
+z.DranchukAbuKassem(ppr, tpr)
+# We do the same with the Dranchuk-Purvis-Robinson correlation
+# but we change the values of the isotherms `Tpr`
+tpr <- c(1.4, 1.4, 1.6, 1.7, 1.8) 
+z.DranchukPurvisRobinson(pres.pr = ppr, temp.pr = tpr)
+# now we use the relative undocumented Shell correlation
+z.Shell(ppr, tpr)
+# the newly added Papp correlation
+z.Papp(ppr, tpr)
+# and finally the correlation Kamyab et al that uses Artificial Neural Networks
+z.Ann10(ppr, tpr)
+# https://github.com/f0nzie/zFactor
+# http://cran.nexr.com/web/packages/zFactor/vignettes/statistics.html
+
+
+
+
+
+
+
+
+
+
+
+
+# 2 – SPI/SPEI DROUGHT INDEX AND ITS CHARACTERISTICS:
+
+data = read.table(file("clipboard"),header=TRUE, sep="\t", dec=".")
+str(data)
+dim(data)
+attach(data)
+summary(data)
+cbind(names(data))
+#
+require(SPEI) 
+library(ggplot2)   
+library(plotly)
+require(MASS)
+require(SCI)
+require(evd)
+#
+i = 3
+spi <- spi(ts(data[,  2 ],frequency=12, start=1953),i,na.rm= TRUE); cbind(head(spi$fitted,10))
+dataspi  = cbind(spi$fitted)
+getwd();write.table(dataspi, "dataspi.txt", col.names=FALSE, row.names=FALSE)
+#
+attach(data)
+cbind(names(data))
+# Compute potential evapotranspiration (PET) and climatic water
+# balance (BAL).
+data$PET <- thornthwaite(data$TMOY, 11.55)
+data$BAL <- data$PRCP - data$PET
+# Convert to a ts (time series) for convenience
+data <- ts(data[, -c(1)], end = c(2019, 12), frequency = 12)
+# One and twelve-months SPEI
+spe1 <- spei(data[, "BAL"], 48 )
+class(spe1)
+# Extract information from `spei` object: summary, call function,
+# fitted values, and coefficients
+names(spe1)
+spe1$fitted
+write.table(spe1$fitted, "spei.txt", col.names=FALSE, row.names=FALSE)
+#
+table(spe1$fitted=="-Inf"); table(spe1$fitted=="Inf")
+library(zoo); spicomp<- zoo::na.approx(serie)
+#https://rstudio-pubs-static.s3.amazonaws.com/202762_d1269e6d029a443a889782fd9dc4f3a0.html
+#
+# Standardized Index values (SPI, SPEI, SSI,...) on a |*DAILY*| basis.
+require(standaRdized)
+require(precintcon)
+# fprint(data)
+cbind(names(data))
+dim(data)
+#
+dates <- seq(from = as.Date('1980-01-01'), to = as.Date('2021-12-01'), by = "day")
+indexFormat(dates) <- "%Y-%m-%d"
+dates <-as.Date( dates , origin = "1980-01-01") 
+SPI_1 <- standardized.index(data = ts(data[,  2 ],frequency=1, start=1980) , agg.length = 30, index.out = dates)
+#
+# https://github.com/WillemMaetens/standaRdized
+# https://rdrr.io/cran/spi/man/spi.html
+#
+#| Standardized Evaop Precipitation Index  (SPEI) :
+data <- read.table(file("clipboard"),header=TRUE, sep="\t", dec=".");str(data)
+str(data)
+attach(data)
+names(data)
+#
+i= 3; X = OBSERVATION
+spi.para <- SCI::fitSCI(X, first.mon = 1, time.scale = i, distr = "gamma", p0 = TRUE); spi <- SCI::transformSCI(X, first.mon = 1, obj = spi.para)
+# getwd();write.table(spi, "data.txt", col.names=FALSE, row.names=FALSE)
+spi <- spi(ts(data[,  2 ],frequency=12, start=1953),i,na.rm= TRUE); cbind(head(spi$fitted,10))
+dataspi  = cbind(spi$fitted)
+head(dataspi ,5)
+getwd();write.table(dataspi, "data.txt", col.names=FALSE, row.names=FALSE)
+#
+attach(data)
+cbind(names(data))
+# Compute potential evapotranspiration (PET) and climatic water
+data$PET <- hargreaves(TM, TX, lat = 11.55, na.rm = TRUE) # meilleur que thorn
+data$BAL <- data$PRCP - data$PET
+# 
+spei.para <- fitSCI(data$BAL ,first.mon=1,time.scale= i,distr="gev",p0=FALSE); spei <- transformSCI(data$BAL,first.mon=1,obj=spei.para)
+# getwd();write.table(spei, "data.txt", col.names=FALSE, row.names=FALSE)
+data <- ts(data[, -c(1)], end = c(2019, 12), frequency = 12)
+spe1 <- spei(data[, "BAL"], i )
+class(spe1)
+names(spe1)
+head(spe1$fitted,5)
+head(spei,5)
+getwd();write.table(cbind(spe1$fitted), "data.txt", col.names=FALSE, row.names=FALSE)
+# https://rdrr.io/cran/SCI/man/fitSCI.html
+#
+# R SPI Index    
+require(utils)
+require(colorRamps)
+require(RNetCDF)
+require(rasterVis)
+require(rgdal)
+library(ncdf4)
+library(raster)
+require(SPEI)
+library(zoo)
+library(pRecipe)
+library(ncdf4)
+library(xts)
+# download_data("chirps", timestep = "monthly"); getwd()
+# download_data("gpm_imerg","C:/Users/hp/Documents", timestep = "monthly")
+# getwd()
+# library("chirps")
+# lonlat <- data.frame(lon = -67.5, lat = -24.5)
+# dates <- c("1981-01-02", "2020-12-31")
+# data <- get_chirps(lonlat, dates, server = "ClimateSERV")
+# https://cran.r-project.org/web/packages/pRecipe/pRecipe.pdf
+# 
+dir()
+setwd("C:/Abdi-Basid ADAN/0.Doc.On.Going/1.Statistical Downscaling Project/Data")
+netdcf4 <- nc_open("chirps-v2.0.1981.days_p05.nc")
+attributes(netdcf4$var)
+var<- ncvar_get(netdcf4,"precip")
+# dates <- as.Date(ncvar_get(netdcf4 , "dates"), format = "%Y-%m-%d")
+# precip_xts <- xts(precipitation_data, order.by = dates)
+# nc.stars.crop <- st_crop(netdcf4 ,DJI)
+#
+aus_temp <- stack("chirps-v2.0.1981.days_p05.nc")  
+# aus_temp <- raster("CHIRPS-1989.tif") 
+extent(djib)
+DJI <- extent(41.74823,43.41764,  10.90872,12.7678 )
+r.crop <- crop(aus_temp,DJI)
+# cropped_data <- crop(ncdata, extent(lon_min, lon_max, lat_min, lat_max))
+dim(r.crop)
+class(r.crop)
+library(sf);djib <- read_sf("C:/Users/hp/Documents/ArcGIS input/Djibouti for mask/MASK SHAPEFILE Djibouti/Regions.shp")
+require(Hmisc); col1 <- colorRampPalette(c("blue4","blue","cyan","green", "yellow", "red", "red4"))(9)
+brk <- c(0,0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75 , 2 ,2.25);length(brk)
+#
+x11(); plot(r.crop[[1]], col=col1,breaks=brk, main="Daily Precipitation" ,xlab="Longitude", ylab="Latitude")
+plot(djib[4],add=TRUE,col=rgb(0, 1, 0, 0.005), lwd=2)
+# dates <- as.Date(l, format = "%Y-%m-%d")
+# precip_xts <- xts( r.crop[365] , order.by = dates)
+r.crop[] <- 1:ncell(r.crop)
+r.mat= as.matrix(r.crop)
+#
+dates = seq(as.Date("1981/1/1"), as.Date("1981/12/31"), "days")
+d <- as.Date(dates)
+rt <- rts(r.crop,d)
+# ep <- endpoints(rt,'years');ep
+# pixelmean <- period.apply(rt,ep,mean); pixelmean
+monthly_precip <- apply.monthly(rt, FUN = sum);monthly_precip
+cl <- colorRampPalette(c('red','orange','yellow','green','blue')) # color palette
+x11(); plot(monthly_precip[[1:8]],col=cl(200))
+#
+# Créer une liste pour stocker les valeurs extraites
+# valus <- extract(r.crop, c(41, 10))
+# dim(valus)
+# valus[] <- 1: ncell(valus)
+#
+your_rasterbrickts <- monthly_precip
+extracted_values <- list()
+for (i in 1:12) {
+  layer <- your_rasterbrickts[[i]]
+  extracted_values[[i]] <- extract(layer, DJI )
+}
+# extracted_values contiendra une liste de valeurs extraites pour chaque couche temporelle
+# extracted_values <- mean(extracted_values[[i]], na.rm=TRUE)
+scale <-        3           # SPI time scale (e.g., 3, 6, 12 months)
+distribution <-  "Gamma"     # Distribution type (e.g., gamma, weibull)
+fit <-           "max-lik"  # Fit distribution parameters (TRUE or FALSE)
+# Calculate SPI for the pixel
+spi_result <- spi(data = as.matrix(monthly_precip)  , scale = scale, distribution = distribution, fit = fit)
+#
+# c <- cellFromXY(monthly_precip , matrix(c(12, 43.1),nrow=1 ))
+# x11();plot(c)
+#
+# write.rts(rt, filename="my_rts",overwrite = F)
+# https://github.com/babaknaimi/rts
+# Exporter SOUS NETCDF4 FILE  :
+# new_ncfile <- nc_create("r.crop.nc", "precip")
+# ncvar <- ncvar_def(new_ncfile, "variable_name", "NC_FLOAT", dim = dim(r.crop))
+# nc_put_var(new_ncfile, ncvar, cropped_data)
+# nc_close(ncfile)
+# nc_close(new_ncfile)
+# https://chat.openai.com/c/dae3d44d-73db-4d88-84c9-d09e1f67e2e7
+# https://stackoverflow.com/questions/49848437/r-standardized-precipitation-index-nc-file
+#https://gis.stackexchange.com/questions/277344/using-spei-function-on-time-series-from-rasterstack-in-r
+# https://rstudio-pubs-static.s3.amazonaws.com/257144_72a0e6517afb4fe3b9fc1b2084114a06.html
+# https://stackoverflow.com/questions/75906466/spi-function-on-a-dataframe-versus-raster-stack
+# https://gis.stackexchange.com/questions/277950/use-spei-function-with-user-specified-parameters-from-a-rasterstack-in-r
+# https://gist.github.com/gponce-ars/171093cf64b000ed998c702a217a3baf
+#
+index1=read.table(file("clipboard"), sep="\t",dec=".", header=T,row.names=1)
+#  index1=read.table(file("clipboard"), sep="\t",dec=".", header=T)
+str(index1)
+attach(index1)
+dim(index1)
+summary(index1)
+ # Category 1 : Extremely Wet
+Cat1=index1[index1 >=2 ]
+cbind(Cat1)
+# Category 2 : Very Wet/Severe
+Cat2=index1[index1 >= 1.50 & index1 <= 1.99]
+cbind(Cat2)
+# Category 3 : Moderately Wet
+Cat3=index1[index1 >= 1.0 & index1 <= 1.49]
+cbind(Cat3)
+# Category 4 : Near  Normal
+Cat4=index1[index1 >= -0.99 & index1 <= 0.99]
+cbind(Cat4)
+# Category 5 : Moderately Dry
+Cat5=index1[index1 >= -1.49 & index1 <= -1.00]
+cbind(Cat5)
+# Category 6 : Severely Dry/Severe
+Cat6=index1[index1 >= -1.99 & index1 <= -1.50]
+cbind(Cat6)
+# Category 7 : Extremely Dry
+Cat7=index1[index1 <=-2 ]
+cbind(Cat7)        
+#
+Cat8=index1[index1 <=-1 ]                      #  Category 8 : Dry Event
+cbind(Cat8)
+#  Category 9 : Wet Event
+Cat9=index1[index1 >=1 ]
+cbind(Cat9)
+#
+#  Category 9 : No Drought Occurs
+Cat10=index1[index1 >=-1 ]
+cbind(Cat10)
+#
+#AliSabieh[AliSabieh >= 1.50] & AliSabieh[AliSabieh< 1.99]
+#my_vec[my_vec == 4]  #  values equal to 4
+#my_vec[my_vec != 4]  #  values not equal to 4
+#val26 <- my_vec[my_vec < 6 & my_vec > 2]    # Extract values in my_vec which are less than 6 AND greater than 2
+#val63 <- my_vec[my_vec > 6 | my_vec < 3]    # Extract values in my_vec that are greater than 6 OR less than 
+#
+#--SEVERITY  # SPI 
+mean(na.omit(Cat8))
+mean(na.omit(Cat9))
+mean(na.omit(Cat10))
+(mean(na.omit(Cat8))+mean(na.omit(Cat9)))/2
+(mean(na.omit(Cat8))+mean(na.omit(Cat10)))/2
+#
+SCat1=na.omit(Cat1);   sum(SCat1)
+SCat2=na.omit(Cat2);   sum(SCat2)
+SCat3=na.omit(Cat3);   sum(SCat3)
+SCat4=na.omit(Cat4);   sum(SCat4)
+SCat5=na.omit(Cat5);   sum(SCat5)
+SCat6=na.omit(Cat6);   sum(SCat6)
+SCat7=na.omit(Cat7);   sum(SCat7)
+SCat8=na.omit(Cat8);   round(sum(SCat8),3)      #  Dry
+SCat9=na.omit(Cat9);   round(sum(SCat9),3)      #  wet
+##index2=index1[1:360 ,];index3=index2[ which( OB_EAST <=-1 &  OB_EAST > -5),] # >=1   <=-1
+#
+index1=read.table(file("clipboard"), sep="\t",dec=".", header=T)
+str(index1)
+attach(index1)
+dim(index1)
+names(index1)[2]
+#
+index2=index1[1:360 ,]         
+index3=subset(index2, OB_WEST<=-1 & OB_WEST > -5, select=c(OB_WEST))      # Dry
+# index3=subset(index2, OB_WEST >= 1 & OB_WEST <  5,  select=c(OB_WEST))  # Wet
+#
+Sever=na.omit(index3);  round(sum(Sever),3)       
+Dur=dim(Sever)[1];      Dur
+Frq=Dur/360;            round(Frq,3)*100 
+Int=sum(Sever)/Dur ;    round(Int,3)
+#
+index2=index1[625:732  ,]
+index3=subset(index2, OB_WEST <=-1 & OB_WEST > -5, select=c(OB_WEST))
+# index3=subset(index2, OB_WEST >= 1 & OB_WEST<  5,  select=c(OB_WEST))
+Sever=na.omit(index3);  round(sum(Sever),3)       
+Dur=dim(Sever)[1];      Dur
+Frq=Dur/108;            round(Frq,3)*100 
+Int=sum(Sever)/Dur ;    round(Int,3)
+#
+#-ExTRACT sEVERITY DATA
+row.names(index1==SCat8)
+colnames(index1==SCat8)
+#
+Cat1=index2[index2 >=2 ]
+cbind(Cat1)
+subset(index2, SPI_12 %in% Cat1) 
+#
+row.names(round(index1,6)  )[round( index1[,1],6) == -1.495354]
+data1=index1[,1]
+library(dplyr);index1 %>% filter_all(any_vars(. %in% c(d1)))
+#
+index1 %>% 
+  select(Adaylou, Adaylou) %>% 
+  filter(Adaylou==d1)
+index1[index1$Adaylou %in% d1, ]
+
+
+#| 3 - PALMER DROUGHT SEVERITY INDEX (PDSI):
+
+data <- read.table(file("clipboard"),header=TRUE, sep="\t", dec=".");str(data)
+Date = seq(as.Date("1966/1/1"), as.Date("2019/12/31"), "month")
+#
+require(scPDSI)
+# data(Lubuge)  P <- Lubuge$P ; PE <- Lubuge$PE
+cbind(names(data))
+require(SPEI); data$PET <- thornthwaite(data$TMOY,11.55)
+# pen <- penman(TMIN, TMAX, AWND, tsun = TSUN, lat = 37.6475, z = 402.6, na.rm = TRUE)
+P <- data$PRCP ; PE <- data$PET
+#
+n_pdsi <- pdsi(P, PE, start = 1966,sc = FALSE)
+sc_pdsi <- pdsi(P, PE, start = 1966,sc = TRUE)
+#  sc_pdsi$X     sc_pdsi$WPLM    sc_pdsi$PHDI
+getwd();write.table(n_pdsi$PHDI  , "data.txt", col.names=FALSE, row.names=FALSE)
+# getwd();write.table(sc_pdsi$PHDI  , "data.txt", col.names=FALSE, row.names=FALSE)
+# x11(); plot(sc_pdsi)                # plot PDSI
+# x11();plot(sc_pdsi, index = "PHDI") # plot PHDI
+# x11();plot(sc_pdsi, index = "WPLM") # plot weighted PDSI
+#install.packages("https://cran.r-project.org/src/contrib/Archive/scPDSI/scPDSI_0.1.3.tar.gz", repo=NULL, type="source")
+#https://www.neonscience.org/resources/learning-hub/tutorials/da-viz-nclimdiv-palmer-drought-data-r
+
+#| 4 - RAINFALL ANOMALY INDEX (RAI) :
+ 
+library(tidyverse)
+library(zoo)
+library(dplyr)
+#
+data <- read.table(file("clipboard"),header=TRUE, sep="\t", dec=".");str(data)
+Date = seq(as.Date("2006/1/1"), as.Date("2100/12/01"), "month")
+# data$Date <- as.Date(data$Date, format="%Y-%m-%d")
+names(data)
+#
+data <- data.frame(Date, data$CHIRPS.AFR44.CanRCM4.RCP.4.5 );attach(data)
+attach(data); names(data) 
+data$Rain = data.CHIRPS.AFR44.CanRCM4.RCP.4.5
+attach(data); names(data)
+head(data,5)
+# Calculer la somme mobile sur 6 mois
+i=3
+data$Rain_6 <- rollapply(data$Rain, width = i , FUN = sum, align = "right", fill = NA)
+# Créer un data frame pour RAI
+df_6mon <- data %>% select(Date, Rain_6) %>% drop_na() %>% mutate(RAI = NA)
+# Calculer RAI
+for (imon in 1:12) {
+  sinds <- month(df_6mon$Date) == imon
+  x <- df_6mon[sinds, ]
+  y <- x
+  x1 <- x[order(-x$Rain_6), ]
+  x_avg <- mean(x1$Rain_6)
+  mx_avg <- mean(head(x1$Rain_6, 10))
+  mn_avg <- mean(tail(x1$Rain_6, 10))
+  anom <- x$Rain_6 - x_avg
+  
+  rai_plus <- 3.0 * anom[anom >= 0] / (mx_avg - x_avg)
+  rai_minus <- -3.0 * anom[anom < 0] / (mn_avg - x_avg)
+  
+  y$RAI[anom >= 0] <- rai_plus
+  y$RAI[anom < 0] <- rai_minus
+  
+  df_6mon[sinds, 'RAI'] <- y$RAI
+}
+data <- left_join(data, df_6mon %>% select(Date, RAI), by = "Date")
+# data$RAI <- df_6mon$RAI
+rm(df_6mon)
+head(data, 7)
+getwd();write.table(data[, 5], "data.txt", col.names=FALSE, row.names=FALSE)
+# https://github.com/royalosyin/Calculate-Precipitation-based-Agricultural-Drought-Indices-with-Python/blob/master/ex7-Calculate%20Rainfall%20Anomaly%20Index%20(RAI)%20with%20Python.ipynb
+
+
+
+
+
+
+#| 5 - RAINFALL DEPARTURE ( RD ) :
+#| 
+data <- read.table(file("clipboard"),header=TRUE, sep="\t", dec=".");str(data)
+Date = seq(as.Date("1953/1/1"), as.Date("2021/12/31"), "month")
+# data$Date <- as.Date(data$Date, format="%Y-%m-%d")
+names(data)
+#
+data <- data.frame(Date, data$OBSERVATION);attach(data)
+attach(data); names(data) 
+data$Rain = data.OBSERVATION
+attach(data); names(data)
+head(data,5)
+#
+data <- data %>% select(Date, Rain)
+# Calculate six-monthly RD
+data$Rain_6 <- rollsum(data$Rain, 12 , fill = NA, align = "right")
+df_6mon <- na.omit(data[c('Date', 'Rain_6')])
+df_6mon$RD <- rep(NA, nrow(df_6mon))
+for (imon in 1:12) {
+  sinds <- month(df_6mon$Date) == imon
+  x <- df_6mon[sinds, 'Rain_6']
+  y <- (x - mean(x)) / mean(x)
+  df_6mon[sinds, 'RD'] <- y
+}
+# Merge data frames based on Date
+data <- merge(data, df_6mon[c('Date', 'RD')], by = 'Date', all.x = TRUE)
+# Display the first 7 rows
+head(data, 7)
+getwd();write.table(data[, 6] , "data.txt", col.names=FALSE, row.names=FALSE)
+# IDENTIQUE A 1 MONTH :
+cbind(names(data))
+attach(data)
+# Dummy data (replace this with your actual data)
+monthly_rainfall <- OBSERVATION
+long_term_average_rainfall <- mean(OBSERVATION) 
+# Calculate Rainfall Departure (RD)
+rainfall_departure <- (monthly_rainfall - long_term_average_rainfall) / long_term_average_rainfall
+# Display the results print("Monthly Rainfall:"); print(monthly_rainfall)
+print("Rainfall Departure (RD):"); print(rainfall_departure)
+getwd();write.table(rainfall_departure, "data.txt", col.names=FALSE, row.names=FALSE)
+
+
+
+#| 6 - STATISTICAL Z-SCORE(Z-SCORE INDEX)  ZSI:
+
+library(tidyverse)
+library(zoo)
+#
+data <- read.table(file("clipboard"),header=TRUE, sep="\t", dec=".");str(data)
+Date = seq(as.Date("1953/1/1"), as.Date("2021/12/31"), "month")
+# data$Date <- as.Date(data$Date, format="%Y-%m-%d")
+names(data)
+#
+data <- data.frame(Date, data$OBSERVATION);attach(da)
+attach(data); names(data) 
+data$Rain = data.OBSERVATION
+attach(data); names(data)
+head(data,5)
+#
+data <- data %>% select(Date, Rain)
+# Calculate six-monthly ZSI
+data$Rain_6 <- rollsum(data$Rain, 9 , fill = NA, align = "right")
+df_6mon <- na.omit(data[c('Date', 'Rain_6')])
+df_6mon$ZSI <- rep(NA, nrow(df_6mon))
+for (imon in 1:12) {
+  sinds <- month(df_6mon$Date) == imon
+  x <- df_6mon[sinds, 'Rain_6']
+  y <- (x - mean(x)) / sd(x)
+  df_6mon[sinds, 'ZSI'] <- y
+}
+# Merge data frames based on Date
+data <- merge(data, df_6mon[c('Date', 'ZSI')], by = 'Date', all.x = TRUE)
+# Display the first 7 rows
+head(data, 7)
+getwd();write.table(data[, 5] , "data.txt", col.names=FALSE, row.names=FALSE)
+# NON IDENTIQUE A 1 MONTH :
+monthly_rainfall <- Rain
+long_term_average_rainfall <- mean(Rain) 
+# Calculate the standard deviation
+standard_deviation <- sd(monthly_rainfall)
+# Calculate the standardized anomaly
+standardized_anomaly <- (monthly_rainfall - long_term_average_rainfall) / standard_deviation
+head(standardized_anomaly,10)
+getwd();write.table(standardized_anomaly , "data.txt", col.names=FALSE, row.names=FALSE)
+
+
+
+#| 7 - EFFECTIVE DROUGHT INDEX(EDI):
+
+require("ClimInd")
+data <- read.table(file("clipboard"),header=TRUE, sep="\t", dec=".");str(data)
+Date = seq(as.Date("1953/1/1"), as.Date("2021/12/31"), "month")
+# data$Date <- as.Date(data$Date, format="%Y-%m-%d")
+names(data)
+attach(data)
+#
+edi <- function(datatype, data) {
+  if (datatype == "daily") {
+    k <- 365
+  } else {
+    k <- 12
+  }
+  p <- rev(data)
+  l <- length(p)
+  sm <- numeric(l)
+  if (l - k + 1 <= 0) {
+    stop("Invalid length for sm vector.")
+  }
+  EP <- numeric(l - k + 1)
+  
+  for (j in 1:(l - k + 1)) {
+    n <- 0
+    for (i in j:(j + k - 1)) {
+      s <- i - j
+      for (m in i:(j + k - 1)) {
+        if (s < m) {
+          s <- s + 1
+        }
+        n <- n + 1
+        sm[n] <- p[i] * (1 / s)
+      }
+    }
+    EP[j] <- sum(sm[1:n])
+  }
+  EDI <- data.frame(EDI = scale(EP)[, 1])
+  return(EDI)
+}
+#
+cbind(names(data))
+result <- edi("monthly", data$OBSERVATION)
+head(result,10)
+getwd();write.table(result   , "data.txt", col.names=FALSE, row.names=FALSE)
+#EDI-NON IDENTIQUE : Prenons celle-ci :
+#
+require(zoo)
+attach(data)
+names(data)
+#
+rainfall_values <-  OBSERVATION
+mo = 12
+ma_rainfall_values  <- rollmean(zoo(rainfall_values, order.by = seq_along(rainfall_values)), k = mo ,   align = "right", fill = NA)
+head(cbind(ma_rainfall_values),5)
+#
+N        <-  length(na.omit(ma_rainfall_values))
+EP <- sum(sapply(1:N, function(j) sum(na.omit(ma_rainfall_values[1:j])) / j))
+EP_terms <- sapply(1:N, function(j) sum(na.omit(ma_rainfall_values[1:j])) / j)
+DEP = EP_terms-mean(EP_terms); length(DEP); length((1 / seq(1, N)))
+PRN = DEP /  (1 / seq(1, N))  # summation <- sum(1 / seq(1, N))
+EDI = PRN/sd(PRN); head(EDI, 10)
+getwd();write.table(EDI   , "data.txt", col.names=FALSE, row.names=FALSE)
+
+
+
+
+#|  8 - RAINFALL DECILES BASED DROUGHT INDEX(RDDI) : 
+
+library(readr)
+library(dplyr)
+library(zoo)
+#
+data = read.table(file("clipboard"),header=TRUE, sep="\t", dec=".");str(data);attach(data) 
+Date = seq(as.Date("1953/1/1"), as.Date("2021/12/31"), "month")
+names(data)
+data <- data.frame(Date, data$OBSERVATION);attach(data)
+names(data)
+data$Rain <- data.OBSERVATION
+# Convert data into probabilities
+data$Rain_6 <- rollsum(data$Rain, 12 , fill=NA, align='right')
+df_6mon <- data %>% select(Date, Rain_6) %>% na.omit()
+df_6mon$Prob <- NA
+for (imon in 1:12) {
+  sinds <- month(df_6mon$Date) == imon
+  x <- df_6mon[sinds, ]
+  y <- (rank(x$Rain_6)-1.0)/(length(x$Rain_6)-1.0)*100.0
+  
+  df_6mon$Prob[df_6mon$Date %in% x$Date] <- y
+}
+# Match probabilities by Date to avoid length mismatch
+data$Prob <- df_6mon$Prob[match(data$Date, df_6mon$Date)]
+rm(df_6mon)
+head(data, 7)
+getwd();write.table(data[,5]  , "data.txt", col.names=FALSE, row.names=FALSE)
+#
+# https://github.com/royalosyin/Calculate-Precipitation-based-Agricultural-Drought-Indices-with-Python/blob/master/ex1-Calculate%20Decile%20Index%20(DI)%20with%20Python.ipynb
+
+
+
+#| 9 -  PPN INDEX DESCRIPTION :
+
+data = read.table(file("clipboard"),header=TRUE, sep="\t", dec=".");str(data);attach(data) 
+Date = seq(as.Date("1953/1/1"), as.Date("2021/12/31"), "month")
+names(data)
+data <- data.frame(Date, data$OBSERVATION);attach(data)
+names(data)
+data$Rain <- data.OBSERVATION
+#
+prec = OBSERVATION
+drg = ts(OBSERVATION,start=c(1953,1), end=c(2021,12), frequency=12 );drg
+drgimp = read.table(file("clipboard"),header=TRUE, sep="\t", dec="."); str(drgimp)
+#cbind(names(dat))  summary(dat)
+means <- apply(drgimp[, -1, drop = FALSE], 2, mean)
+replicated_vector <- rep(means , times = length(prec)/12)
+PPN = (prec/as.data.frame(replicated_vector))*100
+head(PPN,11)
+getwd();write.table(PPN  , "data.txt", col.names=FALSE, row.names=FALSE)
+
+
+
+
+#|  10 - HUTCHINSON DROUGHT SEVERITY INDEX (HDSI) :
+
+library(dplyr)
+library(zoo)
+#
+data <- read.table(file("clipboard"),header=TRUE, sep="\t", dec=".");str(data)
+Date = seq(as.Date("1953/1/1"), as.Date("2021/12/31"), "month")
+# data$Date <- as.Date(data$Date, format="%Y-%m-%d")
+names(data)
+#
+data <- data.frame(Date, data$OBSERVATION);attach(data)
+attach(data); names(data) 
+data$Rain = data.OBSERVATION
+head(data,5)
+# Calculer la somme roulante sur 6 mois
+data$Rain_6 <- rollsum(data$Rain, 12 , align = "right", fill = NA)
+# Définir le seuil de sécheresse
+droughtThreshold <- 0.375
+# Calculer l'indice HDI
+data$HDI <- NA
+for (imon in 1:12) {
+  sinds <- which(month(data$Date) == imon)
+  x <- data$Rain_6[sinds]
+  y <- (rank(x) - 1.0) / (length(x) - 1.0)
+  z <- 8.0 * (y - 0.5)
+  data$HDI[sinds] <- z
+}
+# Afficher les premières lignes du valeurs  4 selon moving average sont manquantes
+head(data, 10)
+getwd();write.table(data[, 5]  , "data.txt", col.names=FALSE, row.names=FALSE)
+
+
+
+#| 11 - CHINA Z-INDEX(CZI) :
+#
+library(lubridate)
+library(dplyr)
+library(zoo)
+# Prepare data
+data=read.table(file("clipboard"),header=TRUE, sep="\t", dec=".");str(data) 
+Date = seq(as.Date("1953/1/1"), as.Date("2021/12/31"), "month")
+names(data)
+data <- data.frame(Date, data$OBSERVATION);attach(data)
+names(data)
+# Calculate six-monthly CZI
+data$Rain_6 <- rollsum(data.OBSERVATION, 12  , align = "right", fill = NA)
+df_6mon <- data[!is.na(data$Rain_6), ]
+df_6mon$CZI <- rep(NA, nrow(df_6mon))
+for (imon in 1:12) {
+  sinds <- month(df_6mon$Date) == imon
+  x <- df_6mon[sinds, "Rain_6"]
+  zsi <- (x - mean(x)) / sd(x)
+  cs <- (zsi^3) / length(x)
+  czi <- 6.0 / cs * ((cs / 2.0 * zsi + 1.0)^(1.0 / 3.0)) - 6.0 / cs + cs / 6.0
+  df_6mon[sinds, "CZI"] <- czi
+}
+data$CZI <- rep(NA, nrow(data))
+data$CZI[match(df_6mon$Date, data$Date)] <- df_6mon$CZI
+head(data, 12)
+getwd();write.table(data[,4]  , "data.txt", col.names=FALSE, row.names=FALSE)
+# https://github.com/royalosyin/Calculate-Precipitation-based-Agricultural-Drought-Indices-with-Python/blob/master/ex5-Calculate%20China-Z%20Index%20(CZI)%20with%20Python.ipynb
+
+
+
+#| 12 - MODIFIED CHINA-Z INDEX (MCZI) :
+#| 
+# Load required libraries
+library(tidyverse)
+#
+data=read.table(file("clipboard"),header=TRUE, sep="\t", dec=".");str(data) 
+Date = seq(as.Date("1953/1/1"), as.Date("2021/12/31"), "month")
+names(data)
+data <- data.frame(Date, data$OBSERVATION);attach(data)
+names(data)
+data$Rain = data.OBSERVATION
+#
+data$Rain_6 <- rollapply(data$Rain, width = 12 , FUN = sum, align = "right", fill = NA)
+df_6mon <- data[complete.cases(data$Rain_6), c("Date", "Rain_6")]
+df_6mon$MCZI <- rep(NA, nrow(df_6mon))
+for (imon in 1:12) {
+  sinds <- format(df_6mon$Date, "%m") == sprintf("%02d", imon)
+  x <- df_6mon[sinds, "Rain_6"]
+  zsi <- (x - median(x)) / sd(x)
+  cs <- (zsi^3) / length(x)
+  czi <- 6.0 / cs * ((cs / 2.0 * zsi + 1.0)^(1.0/3.0)) - 6.0 / cs + cs / 6.0
+  df_6mon$MCZI[sinds] <- czi
+}
+data <- merge(data, df_6mon[, c("Date", "MCZI")], by = "Date", all.x = TRUE)
+head(data, 7)
+getwd();write.table(data[,7]  , "data.txt", col.names=FALSE, row.names=FALSE)
+# 
+# https://github.com/royalosyin/Calculate-Precipitation-based-Agricultural-Drought-Indices-with-Python/blob/master/ex6-Calculate%20Modified%20China-Z%20Index%20(MCZI)%20with%20Python.ipynb
+
+
+
+# | 13 - PERCENT OF NORMAL INDEX (PNI):
+#
+library(ggplot2)
+library(dplyr)
+require(zoo)
+library(lubridate)
+library(readr)
+# Charger les données
+data <- read.table(file("clipboard"),header=TRUE, sep="\t", dec=".");str(data)
+Date = seq(as.Date("1953/1/1"), as.Date("2021/12/31"), "month")
+names(data)
+#
+data <- data.frame(Date, data$OBSERVATION);attach(data)
+attach(data);names(data)
+data$Rain = data.OBSERVATION
+head(data,5)
+# Calculate monthly PNI
+data$Rain_6 <- rollsum(data$Rain, 12 , fill = NA, align = "right")
+df_6mon <- data[complete.cases(data$Rain_6), c('Date', 'Rain_6')]
+df_6mon$PNI <- rep(NA, nrow(df_6mon))
+# Finale -30 pour la periode :
+for (imon in 1:12) {
+  sinds <- lubridate::month(df_6mon$Date) == imon
+  x <- df_6mon[sinds, ]
+  y <- x$Rain_6 / mean(x$Rain_6[lubridate::year(x$Date) %in% 1981:2010]) * 100
+  y[y > 500] <- 500
+  df_6mon$PNI[sinds] <- y
+}
+data$PNI <- rep(NA, nrow(data))
+data$PNI[match(df_6mon$Date, data$Date)] <- df_6mon$PNI
+head(data, 7)
+getwd();write.table(data[,5]  , "data.txt", col.names=FALSE, row.names=FALSE)
+#https://github.com/royalosyin/Calculate-Precipitation-based-Agricultural-Drought-Indices-with-Python/blob/master/ex0-Calculate%20Precipitation-based%20Agricultural%20Drought%20Indices%20with%20Python.ipynb
+#MANUSCRIPT/ https://github.com/royalosyin/Calculate-Precipitation-based-Agricultural-Drought-Indices-with-Python/blob/master/ex0-Calculate%20Precipitation-based%20Agricultural%20Drought%20Indices%20with%20Python.ipynb
+# PAPER /     http://dx.doi.org/10.1016/j.wace.2015.05.002i
+
+
+
+#| 14 - RECONNAISSANCE DROUGHT INDEX RDI:
+#
+data <- read.table(file("clipboard"),header=TRUE, sep="\t", dec=".");str(data)
+Date = seq(as.Date("1966/1/1"), as.Date("2019/12/31"), "month")
+data <- data.frame(data, Date)
+attach(data)
+names(data)
+#
+require(SPEI)
+library(zoo)
+#
+har <- hargreaves(TM, TX, lat = 11.55, na.rm = TRUE) # meilleur que thorn
+thor <- thornthwaite(TMOY, 11.55)
+# pen <- penman(TMIN, TMAX, AWND, tsun = TSUN, lat = 37.6475, z = 402.6, na.rm = TRUE)
+# x11(); plot(har); abline(0, 1); plot(ts(har, fr = 12)); grid()
+head(cbind(har,thor), 7)
+# getwd();write.table(har  , "data.txt", col.names=FALSE, row.names=FALSE)
+#
+precipitation_ts <- zoo(PRCP, order.by = seq_along(PRCP))
+PET_ts <- zoo(har, order.by = seq_along(har))
+# Calculate the moving average
+ma_precipitation <- rollmean(precipitation_ts, k = 12 ,   align = "right", fill = NA)
+ma_PET <- rollmean(PET_ts, k =                     12  ,  align = "right", fill = NA)
+head(cbind(ma_precipitation),5)
+#
+cumulative_ma_precipitation <- cumsum(na.omit(ma_precipitation) )
+cumulative_ma_PET <- cumsum(na.omit(ma_PET))
+ratio <- cumulative_ma_precipitation / cumulative_ma_PET
+head(cbind(ratio) , 7)
+getwd();write.table(cbind(ratio)  , "data.txt", col.names=FALSE, row.names=FALSE)
+#
+# https://cran.r-project.org/web/packages/SPEI/SPEI.pdf
+# https://www.sciencedirect.com/science/article/abs/pii/S1474706513001034
